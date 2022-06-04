@@ -10,7 +10,7 @@
 
 // ------------------------- Define
 #define PORT 6000
-#define MAX_BUFFER 1000
+#define MAX_BUFFER 3000
 #define MAX_CLIENTS 3
 #define NB_ARTICLES 3
 #define EXIT "exit"
@@ -103,7 +103,7 @@ int main(int argc, char const *argv[])
             send(fdSocketCommunication, tampon, strlen(tampon), 0);
         } else
         {
-            sprintf(tampon, "%d",-1);
+            sprintf(tampon, "%d", -1);
             send(fdSocketCommunication, tampon, strlen(tampon), 0);
         }
     } while (isIdProduitValide(idProduit) != 1);

@@ -9,14 +9,16 @@
 #include <unistd.h>
 
 #define PORT 6000
-#define MAX_BUFFER 1000
+#define MAX_BUFFER 3000
 #define MAX_CLIENTS 3
 #define EXIT "exit"
 #define ADRESSE_SERVEUR "127.0.0.1"
 
 //Prototypes fonctions
 void lireCommande(char tampon[], char *message);
+
 int testQuitter(char tampon[]);
+
 int ouvrirUneConnexionTcp(void);
 
 int main(void)
@@ -74,11 +76,25 @@ int main(void)
     //on affiche le produit désiré
     printf("%s\n", tampon);
 
-    lireCommande(tampon, "Quelle quantité désirez vous ?");
 
-    // on envoie au serveur la quantite désirée du produit
-    send(fdSocket, tampon, strlen(tampon), 0);
 
+    do
+    {
+        lireCommande(tampon, "Quelle quantité désirez vous ?");
+
+        // on envoie au serveur la quantite désirée
+        send(fdSocket, tampon, strlen(tampon), 0);
+
+        // on reçoit la facture
+        nbRecu = recv(fdSocket, tampon, MAX_BUFFER, 0);
+
+        if (nbRecu <= 0)
+        {
+            exit(EXIT_FAILURE);
+        }
+        tampon[nbRecu] = 0;
+
+    } while (strcmp(tampon, "-1") == 0);
 
 
     close(fdSocket);
