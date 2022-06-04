@@ -7,9 +7,10 @@
 #include <unistd.h>
 
 #define PORT 6000
-#define MAX_BUFFER 1000
+#define MAX_BUFFER 3000
 
 int ouvrirUneSocketAttente();
+static void decode_commande (uint16_t *recv_data, size_t recv_len);
 
 int main(int argc, char const *argv[])
 {
@@ -40,10 +41,12 @@ int main(int argc, char const *argv[])
     if (nbRecu > 0)
     {
         tampon[nbRecu] = 0;
-        printf("Recu : %s\n", tampon);
+        printf("Recu : %d\n", atoi(tampon));
     }
 
     printf("Envoi du message au client.\n");
+
+
     strcpy(tampon, "Message renvoyé par le serveur vers le client !");
     // on envoie le message au client
     send(fdSocketCommunication, tampon, strlen(tampon), 0);
