@@ -18,12 +18,22 @@
 
 // ------------------------- Prototypes fonctions
 void initialiserMagasin(void);
+
 int getStockParArticle(int idArticle);
+
 int getPrixParArticle(int idArticle);
+
 char *getLibeleParArticle(int idArticle);
+
 void afficherArticlesEtPrix(void);
+
 void afficherStockParArticle(int idArticle);
+
 int ouvrirUneSocketAttente(void);
+
+int isIdProduitValide(int idProduit);
+//char *creerCommande(int valeur);
+
 
 // ------------------------- Structure MAGASIN ----------------------
 struct
@@ -31,10 +41,11 @@ struct
     int idArticles[NB_ARTICLES];
     int stockParArticle[NB_ARTICLES];
     int prixParArticle[NB_ARTICLES];
-
 } Magasin;
 
+// --------------------- ---- -------------------------------------
 // --------------------- MAIN -------------------------------------
+// --------------------- ---- -------------------------------------
 int main(int argc, char const *argv[])
 {
     int fdSocketAttente;
@@ -58,9 +69,10 @@ int main(int argc, char const *argv[])
 
     printf("Client connecté\n");
     printf("Envoi du catalogue au client.\n");
+    //printf(creerCommande(1));
 
     //on crée une string du catalogue produit a envoyer au client
-    sprintf(tampon, "[%d] %s - %d€ \n"
+    sprintf(tampon, "[%d] %s - %d€\n"
                     "[%d] %s - %d€\n"
                     "[%d] %s - %d€\n",
             1, getLibeleParArticle(1), getPrixParArticle(1),
@@ -70,15 +82,42 @@ int main(int argc, char const *argv[])
     // on envoie le catalogue au client
     send(fdSocketCommunication, tampon, strlen(tampon), 0);
 
-    // on attend le produit demandé par le client
+    int idProduit = -1;
+    do
+    {
+        // on attend le produit demandé par le client
+        nbRecu = recv(fdSocketCommunication, tampon, MAX_BUFFER, 0);
+
+        //réception  de l’id du produit demandé par le client
+        if (nbRecu <= 0)
+        {
+            exit(EXIT_FAILURE);
+        }
+        tampon[nbRecu] = 0;
+        idProduit = atoi(tampon);
+
+        if (isIdProduitValide(idProduit) == 1)
+        {
+            sprintf(tampon, "[%d] %s - %d€ - Stock : %d\n", idProduit, getLibeleParArticle(idProduit),
+                    getPrixParArticle(idProduit), getStockParArticle(idProduit));
+            send(fdSocketCommunication, tampon, strlen(tampon), 0);
+        } else
+        {
+
+            sprintf(tampon, "%d",-1);
+            send(fdSocketCommunication, tampon, strlen(tampon), 0);
+        }
+    } while (isIdProduitValide(idProduit) != 1);
+
+    // on attend la quantité demandée par le client
     nbRecu = recv(fdSocketCommunication, tampon, MAX_BUFFER, 0);
 
-    //affichage de l’id du produit demandé par le client
-    if (nbRecu > 0)
+    //réception  de l’id du produit demandé par le client
+    if (nbRecu <= 0)
     {
-        tampon[nbRecu] = 0;
-        printf("Recu : %s\n", tampon);
+        exit(EXIT_FAILURE);
     }
+
 
     close(fdSocketCommunication);
     close(fdSocketAttente);
@@ -153,6 +192,18 @@ void afficherStockParArticle(int idArticle)
     }
 }
 
+int isIdProduitValide(int idProduit)
+{
+    for (int i = 0; i < MAX_CLIENTS; i++)
+    {
+        if (idProduit == Magasin.idArticles[i])
+        {
+            return 1;
+        }
+    }
+    return 0;
+}
+
 // ------------------------- TCP ----------------------------------
 int ouvrirUneSocketAttente(void)
 {
@@ -195,3 +246,16 @@ int ouvrirUneSocketAttente(void)
 
     return socketTemp;
 }
+
+//char *creerFacture(int idProduit, int quantite)
+//{
+//    int prixTotal = getPrixParArticle(idProduit) * quantite;
+//    char *facture;
+//    sprintf(facture, "Facture client\n"
+//                     "Article choisi : %s \n"
+//                     "- Quantite achetée : %d - Prix unitaire : %d \n"
+//                     "- Prix Total : %d€\n",
+//            idProduit, getLibeleParArticle(idProduit), getPrixParArticle(idProduit), getStockParArticle(idProduit),
+//            prixTotal);
+//    return facture;
+//}

@@ -42,23 +42,52 @@ int main(void)
     // on reçoit le catalogue produit du serveur
     nbRecu = recv(fdSocket, tampon, MAX_BUFFER, 0);
 
-    if (nbRecu > 0)
+    // si catalogue non reçu
+    if (nbRecu <= 0)
     {
-        //on affiche le catalogue
-        tampon[nbRecu] = 0;
-        printf("Recu : %s\n", tampon);
+        exit(EXIT_FAILURE);
+    }
+
+    //on affiche le catalogue
+    tampon[nbRecu] = 0;
+    printf("Recu : %s\n", tampon);
+
+    do
+    {
 
         //on demande à l’utilisateur le produit désiré
-        lireCommande(tampon, "Veuillez choisir un produit (saisissez le numéro 1, 2 ou 3 :");
+        lireCommande(tampon, "Veuillez saisir le numéro (1, 2, 3, …) du produit désiré :");
 
         // on envoie au serveur l'id du produit désiré
         send(fdSocket, tampon, strlen(tampon), 0);
-    }
+
+        // on reçoit les infos du produit désiré
+        nbRecu = recv(fdSocket, tampon, MAX_BUFFER, 0);
+        if (nbRecu <= 0)
+        {
+            exit(EXIT_FAILURE);
+        }
+        tampon[nbRecu] = 0;
+
+        int tmpInt = strcmp(tampon, "Erreur le produit n'existe pas !");
+        printf("la valeur de strcmp: %d,\n la valeur de tampon: %s", tmpInt, tampon);
+
+    } while (strcmp(tampon, "Erreur le produit n'existe pas !") == 0);
+
+    //on affiche le produit désiré
+    tampon[nbRecu] = 0;
+    printf("%s\n", tampon);
+
+    lireCommande(tampon, "Quelle quantité désirez vous ?");
+
+    // on envoie au serveur la quantite désirée du produit
+    send(fdSocket, tampon, strlen(tampon), 0);
+
+
 
     close(fdSocket);
 
     return EXIT_SUCCESS;
-
 }
 
 int ouvrirUneConnexionTcp(void)
