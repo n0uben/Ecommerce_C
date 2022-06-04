@@ -26,49 +26,52 @@ void initialiserMagasin()
     for (int i = 0; i < NB_ARTICLES; ++i) {
         Magasin.idArticles[i] = i+1;
         Magasin.stockParArticle[i] = 10;
-        Magasin.prixParArticle[i] = 100 + (i * 50);
+        Magasin.prixParArticle[i] = 300 + ((i * 10) * 50);
     }
     printf("Magasin initilise !\n");
 }
 
-void getListeArticles()
+int getStockParArticle(int idArticle)
 {
-    return char *listeArticles = "[1] Projet en C - 500€ \n"
-                                 "[2] Projet en java - 1000€\n"
-                                 "[3] Projet en CSS only (HTML fourni dans un pack additionnel) - 2999€\n";
+    int stockArticle = Magasin.stockParArticle[idArticle - 1];
+    return stockArticle;
 }
 
-char concatener(int valeur)
+int getPrixParArticle(int idArticle)
 {
-    const char* str1 = "hello there";
-    int n1 = 1234;
+    int prixArticle = Magasin.prixParArticle[idArticle - 1];
+    return prixArticle;
+}
 
-    char *num;
-    char buffer[MAX];
+void afficherArticles()
+{
+    printf("[%d] Projet en C - %d€ \n"
+           "[%d] Projet en Java - %d€\n"
+           "[%d] Projet en CSS only (HTML fourni dans un pack additionnel) - %d€\n",
+           1, getPrixParArticle(1),
+           2, getPrixParArticle(2),
+           3, getPrixParArticle(3));
+}
 
-    if (asprintf(&num, "%d", n1) == -1) {
-        perror("asprintf");
-    } else {
-        return strcat(strcpy(buffer, str1), num);
+void afficherStockParArticle(int idArticle)
+{
+    if (idArticle == 1)
+    {
+        printf("[%d] Projet en C - %d quantite en stock !", idArticle, getStockParArticle(idArticle));
+    }
+    else if (idArticle == 2)
+    {
+        printf("[%d] Projet en Java - %d quantite en stock !", idArticle, getStockParArticle(idArticle));
+    }
+    else if (idArticle == 3)
+    {
+        printf("[%d] Projet en CSS only (HTML fourni dans un pack additionnel) - %d quantite en stock !", idArticle, getStockParArticle(idArticle));
     }
 }
 
-void getStockParArticle(int idArticle)
-{
-    int stockArticle = Magasin.stockParArticle[idArticle - 1];
-    printf("Voici le stock de l'article %d : %d\n", idArticle, stockArticle);
-}
-
-void getPrixParArticle(int idArticle)
-{
-    int prixArticle = Magasin.prixParArticle[idArticle - 1];
-    printf("Voici le prix de l'article %d : %d\n", idArticle, prixArticle);
-}
 
 
 int main(void) {
     initialiserMagasin();
-    getStockParArticle(3);
-    getPrixParArticle(3);
-
+    afficherArticles();
 }
