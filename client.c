@@ -96,6 +96,8 @@ int main(void)
 
     } while (strcmp(tampon, "-1") == 0);
 
+    printf("%s\n", tampon);
+
 
     close(fdSocket);
 
