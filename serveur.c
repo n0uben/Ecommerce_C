@@ -121,6 +121,7 @@ int main(int argc, char const *argv[])
         tampon[nbRecu] = 0;
 
         printf("LE TAMPON : %s\n", tampon);
+        printf("Lid produit : %d\n", idProduit);
 
         quantiteDemandee = atoi(tampon);
 
