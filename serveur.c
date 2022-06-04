@@ -18,22 +18,15 @@
 
 // ------------------------- Prototypes fonctions
 void initialiserMagasin(void);
-
 int getStockParArticle(int idArticle);
-
 int getPrixParArticle(int idArticle);
-
 char *getLibeleParArticle(int idArticle);
-
 void afficherArticlesEtPrix(void);
-
 void afficherStockParArticle(int idArticle);
-
-int ouvrirUneSocketAttente(void);
-
 int isIdProduitValide(int idProduit);
+int isQuantiteDisponible(int quantitedemandee, int idProduit);
+int ouvrirUneSocketAttente(void);
 //char *creerCommande(int valeur);
-
 
 // ------------------------- Structure MAGASIN ----------------------
 struct
@@ -79,13 +72,14 @@ int main(int argc, char const *argv[])
             2, getLibeleParArticle(2), getPrixParArticle(2),
             3, getLibeleParArticle(3), getPrixParArticle(3));
 
-    // on envoie le catalogue au client
+    //on envoie le catalogue au client
     send(fdSocketCommunication, tampon, strlen(tampon), 0);
 
+    //TRAITEMENT DU PRODUIT DEMANDÉ PAR LUTILISATEUR
     int idProduit = -1;
     do
     {
-        // on attend le produit demandé par le client
+        //on attend le produit demandé par le client
         nbRecu = recv(fdSocketCommunication, tampon, MAX_BUFFER, 0);
 
         //réception  de l’id du produit demandé par le client
@@ -96,26 +90,53 @@ int main(int argc, char const *argv[])
         tampon[nbRecu] = 0;
         idProduit = atoi(tampon);
 
-        if (isIdProduitValide(idProduit) == 1)
+        if (isIdProduitValide(idProduit))
         {
             sprintf(tampon, "[%d] %s - %d€ - Stock : %d\n", idProduit, getLibeleParArticle(idProduit),
                     getPrixParArticle(idProduit), getStockParArticle(idProduit));
+            send(fdSocketCommunication, tampon, strlen(tampon), 0);
+            printf("Infos envoyées au client\n");
+        } else
+        {
+            sprintf(tampon, "%d", -1);
+            send(fdSocketCommunication, tampon, strlen(tampon), 0);
+            printf("Message erreur envoyé au client\n");
+        }
+    } while (isIdProduitValide(idProduit) != 1);
+
+
+
+    //TRAITEMENT DE LA QUANTITE DEMANDÉE PAR L'UTILISATEUR
+    int quantiteDemandee = -1;
+    do {
+        // on attend la quantité demandée par le client
+        nbRecu = recv(fdSocketCommunication, tampon, MAX_BUFFER, 0);
+
+        //réception  de l’id du produit demandé par le client
+        if (nbRecu <= 0)
+        {
+            exit(EXIT_FAILURE);
+        }
+
+        tampon[nbRecu] = 0;
+
+        printf("LE TAMPON : %s\n", tampon);
+
+        quantiteDemandee = atoi(tampon);
+
+        if (isQuantiteDisponible(quantiteDemandee, idProduit)) {
+            printf("Reçu : %s\n", tampon);
+
+            sprintf(tampon, "coucou\n");
             send(fdSocketCommunication, tampon, strlen(tampon), 0);
         } else
         {
             sprintf(tampon, "%d", -1);
             send(fdSocketCommunication, tampon, strlen(tampon), 0);
+            printf("Message erreur envoyé au client\n");
         }
-    } while (isIdProduitValide(idProduit) != 1);
+    } while (isQuantiteDisponible(quantiteDemandee, idProduit));
 
-    // on attend la quantité demandée par le client
-    nbRecu = recv(fdSocketCommunication, tampon, MAX_BUFFER, 0);
-
-    //réception  de l’id du produit demandé par le client
-    if (nbRecu <= 0)
-    {
-        exit(EXIT_FAILURE);
-    }
 
 
     close(fdSocketCommunication);
@@ -199,6 +220,14 @@ int isIdProduitValide(int idProduit)
         {
             return 1;
         }
+    }
+    return 0;
+}
+
+int isQuantiteDisponible(int quantitedemandee, int idProduit)
+{
+    if (Magasin.stockParArticle[idProduit] >= quantitedemandee) {
+        return 1;
     }
     return 0;
 }
