@@ -69,13 +69,9 @@ int main(void)
         }
         tampon[nbRecu] = 0;
 
-        int tmpInt = strcmp(tampon, "Erreur le produit n'existe pas !");
-        printf("la valeur de strcmp: %d,\n la valeur de tampon: %s", tmpInt, tampon);
-
-    } while (strcmp(tampon, "Erreur le produit n'existe pas !") == 0);
+    } while (strcmp(tampon, "-1") == 0);
 
     //on affiche le produit désiré
-    tampon[nbRecu] = 0;
     printf("%s\n", tampon);
 
     lireCommande(tampon, "Quelle quantité désirez vous ?");

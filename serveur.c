@@ -103,7 +103,6 @@ int main(int argc, char const *argv[])
             send(fdSocketCommunication, tampon, strlen(tampon), 0);
         } else
         {
-
             sprintf(tampon, "%d",-1);
             send(fdSocketCommunication, tampon, strlen(tampon), 0);
         }
