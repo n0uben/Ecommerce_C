@@ -16,9 +16,7 @@
 
 //Prototypes fonctions
 void lireCommande(char tampon[], char *message);
-
 int testQuitter(char tampon[]);
-
 int ouvrirUneConnexionTcp(void);
 
 int main(void)
@@ -75,7 +73,6 @@ int main(void)
 
     //on affiche le produit désiré
     printf("%s\n", tampon);
-
 
 
     do
