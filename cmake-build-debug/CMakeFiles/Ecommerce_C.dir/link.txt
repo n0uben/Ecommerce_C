@@ -1,1 +1,0 @@
-/usr/bin/cc -g   CMakeFiles/Ecommerce_C.dir/client.c.o CMakeFiles/Ecommerce_C.dir/serveur.c.o  -o Ecommerce_C 
