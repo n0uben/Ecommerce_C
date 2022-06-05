@@ -141,7 +141,7 @@ void initialiserMagasin(Magasin *magasin)
         magasin->stockParArticle[i] = 10;
         magasin->prixParArticle[i] = 300 + ((i * 10) * 50);
         magasin->compteurNombreClient = 0;
-        magasin->tempsMax = (double) (time(NULL) + NB_SECONDES);
+//        magasin->tempsMax = (double) (time(NULL) + NB_SECONDES);
     }
     printf("Magasin initialisé !\n");
 }
@@ -338,8 +338,9 @@ _Noreturn void *fonctionVendeur(void *arg)
                 magasin->stockParArticle[i] += 5;
             }
             pthread_mutex_unlock(&mutexProduits[i]);
+
+            printf("Je suis le vendeur, je rajoute 5 unités a tous les produits\n");
         }
-        printf("Je suis le vendeur, je rajoute 5 unités\n");
         sleep(1);
 
     }
