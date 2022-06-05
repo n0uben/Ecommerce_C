@@ -5,4 +5,4 @@ set(CMAKE_C_STANDARD 11)
 
 add_executable(Ecommerce_C
         client.c
-        serveur.c)
+        serveur.c td7exo3.c)

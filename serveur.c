@@ -16,6 +16,7 @@
 #define MAX_BUFFER 3000
 #define MAX_CLIENTS 3
 #define NB_ARTICLES 3
+#define NB_SECONDES 15
 #define EXIT "exit"
 
 typedef struct
@@ -23,17 +24,23 @@ typedef struct
     int idArticles[NB_ARTICLES];
     int stockParArticle[NB_ARTICLES];
     int prixParArticle[NB_ARTICLES];
+    double tempsMax;
     int compteurNombreClient;
     int fdSocketCommunication;
 
 } Magasin;
 
 sem_t semaphore;
-pthread_mutex_t mutexCompteurClients;
+pthread_mutex_t mutexCompteur;
+pthread_mutex_t mutexProduits[NB_ARTICLES];
+pthread_cond_t conditionStockOk[NB_ARTICLES];
+pthread_cond_t conditionStockEpuise[NB_ARTICLES];
 
 // ------------------------- Prototypes fonctions
 void initialiserMagasin(Magasin *magasin);
 void *accueillirClient(void *arg);
+void *fonctionVendeur(void *arg);
+
 int getStockParArticle(Magasin *magasin, int idArticle);
 int getPrixParArticle(Magasin *magasin, int idArticle);
 char *getLibeleParArticle(int idArticle);
@@ -52,12 +59,7 @@ void creerFacture(Magasin *magasin, int idProduit, int quantite, char facture[])
 // --------------------- ---- -------------------------------------
 int main(void)
 {
-    if (sem_init(&semaphore, 0, MAX_CLIENTS) != 0)
-    {
-        printf("erreur de creation de semaphore\n");
-        return EXIT_FAILURE;
-    }
-    pthread_mutex_init(&mutexCompteurClients, NULL);
+
 
     Magasin magasin;
     initialiserMagasin(&magasin);
@@ -68,13 +70,34 @@ int main(void)
 
 //    pthread_t vendeur;
     pthread_t clients[MAX_CLIENTS];
+    pthread_t vendeurs[NB_ARTICLES];
+
+    for (int i = 0; i < NB_ARTICLES; ++i) {
+        if (pthread_create(&vendeurs[i], NULL, fonctionVendeur, &magasin) != 0) {
+            printf("erreur de creation de thread vendeur\n");
+            return EXIT_FAILURE;
+        }
+    }
+
+    if (sem_init(&semaphore, 0, MAX_CLIENTS) != 0)
+    {
+        printf("erreur de creation de semaphore\n");
+        return EXIT_FAILURE;
+    }
+    pthread_mutex_init(&mutexCompteur, NULL);
+    for (int i = 0; i < NB_ARTICLES; ++i) {
+        pthread_mutex_init(&mutexProduits[i], NULL);
+        pthread_cond_init(&conditionStockOk[i], NULL);
+        pthread_cond_init(&conditionStockEpuise[i], NULL);
+    }
 
 
     fdSocketAttente = ouvrirUneSocketAttente();
 
     socklen_t tailleCoord = sizeof(coordonneesAppelant);
 
-    while (1)
+    int nbClientTotal = 0;
+    while (nbClientTotal < MAX_CLIENTS)
     {
         if ((*fdSocketCommunication = accept(fdSocketAttente, (struct sockaddr *) &coordonneesAppelant,
                                              &tailleCoord)) == -1)
@@ -85,9 +108,33 @@ int main(void)
 
         if (pthread_create(&clients[magasin.compteurNombreClient], NULL, accueillirClient, &magasin) != 0)
         {
-            printf("erreur de creation de thread vendeur\n");
+            printf("erreur de creation de thread client\n");
             return EXIT_FAILURE;
         }
+        nbClientTotal++;
+    }
+
+    // cette partie pour forcer tous les threads à se reveiller et sortir de leur boucle
+    sleep(NB_SECONDES + 1);
+    printf("\nbroadcast\n");
+    for (int k = 0; k < NB_ARTICLES; ++k) {
+        pthread_cond_broadcast(&conditionStockOk[k]);
+        pthread_cond_broadcast(&conditionStockEpuise[k]);
+    }
+
+    for (int i = 0; i < NB_ARTICLES; ++i) {
+        pthread_join(vendeurs[i], NULL);
+    }
+
+    for (int j = 0; j < MAX_CLIENTS; ++j) {
+        pthread_join(clients[j], NULL);
+    }
+
+    pthread_mutex_destroy(&mutexCompteur);
+    for (int i = 0; i < NB_ARTICLES; ++i) {
+        pthread_mutex_destroy(&mutexProduits[i]);
+        pthread_cond_destroy(&conditionStockOk[i]);
+        pthread_cond_destroy(&conditionStockEpuise[i]);
     }
 }
 
@@ -102,13 +149,16 @@ void initialiserMagasin(Magasin *magasin)
         magasin->stockParArticle[i] = 10;
         magasin->prixParArticle[i] = 300 + ((i * 10) * 50);
         magasin->compteurNombreClient = 0;
+        magasin->tempsMax = (double) (time(NULL) + NB_SECONDES);
     }
     printf("Magasin initialisé !\n");
 }
 
 int getStockParArticle(Magasin *magasin, int idArticle)
 {
+    pthread_mutex_lock(&mutexProduits[idArticle - 1]);
     int stockArticle = magasin->stockParArticle[idArticle - 1];
+    pthread_mutex_unlock(&mutexProduits[idArticle - 1]);
 
     return stockArticle;
 }
@@ -134,6 +184,41 @@ char *getLibeleParArticle(int idArticle)
     }
 }
 
+
+int isIdProduitValide(Magasin *magasin, int idProduit)
+{
+    for (int i = 0; i < MAX_CLIENTS; i++)
+    {
+        if (idProduit == magasin->idArticles[i])
+        {
+            return 1;
+        }
+    }
+    return 0;
+}
+
+int isQuantiteDisponible(Magasin *magasin, int quantitedemandee, int idProduit)
+{
+    if (getStockParArticle(magasin, idProduit) < quantitedemandee || quantitedemandee == 0)
+    {
+        return 0;
+    }
+    return 1;
+}
+
+void creerFacture(Magasin *magasin, int idProduit, int quantite, char facture[])
+{
+    int prixTotal = getPrixParArticle(magasin, idProduit) * quantite;
+    sprintf(facture, "Facture client\n"
+                     "- Article choisi : %s \n"
+                     "- Quantite achetée : %d - Prix unitaire : %d€ \n"
+                     "- Prix Total : %d€\n",
+            getLibeleParArticle(idProduit), quantite, getPrixParArticle(magasin, idProduit),
+            prixTotal);
+    facture[strlen(facture)] = 0;
+}
+
+
 //--------------------------------------------------
 
 void *accueillirClient(void *arg)
@@ -144,9 +229,10 @@ void *accueillirClient(void *arg)
     char tampon[MAX_BUFFER];
     int nbRecu;
 
-    pthread_mutex_lock(&mutexCompteurClients);
+    pthread_mutex_lock(&mutexCompteur);
     magasin->compteurNombreClient += 1;
-    pthread_mutex_unlock(&mutexCompteurClients);
+    printf("Client n°: %d", magasin->compteurNombreClient);
+    pthread_mutex_unlock(&mutexCompteur);
 
     printf("Client connecté\n");
     printf("Envoi du catalogue au client.\n");
@@ -217,8 +303,12 @@ void *accueillirClient(void *arg)
             char facture[MAX_BUFFER];
 
             creerFacture(magasin, idProduit, quantiteDemandee, facture);
+
+            pthread_mutex_lock(&mutexProduits[idProduit - 1]);
+            magasin->stockParArticle[idProduit - 1] -= quantiteDemandee;
+            pthread_mutex_unlock(&mutexProduits[idProduit - 1]);
+
             send(fdSocketCommunication, facture, strlen(facture), 0);
-            magasin->stockParArticle[idProduit - 1] = getStockParArticle(magasin, idProduit) - quantiteDemandee;
             printf("Quantite de %s restante : %d\n", getLibeleParArticle(idProduit),
                    magasin->stockParArticle[idProduit - 1]);
 
@@ -229,48 +319,45 @@ void *accueillirClient(void *arg)
             printf("Message erreur envoyé au client\n");
         }
     } while (isQuantiteDisponible(magasin, quantiteDemandee, idProduit) != 1);
-
-    pthread_mutex_lock(&mutexCompteurClients);
-    magasin->compteurNombreClient -= 1;
-    pthread_mutex_unlock(&mutexCompteurClients);
+//
+//    pthread_mutex_lock(&mutexCompteur);
+//    magasin->compteurNombreClient -= 1;
+//    pthread_mutex_unlock(&mutexCompteur);
 
     sem_post(&semaphore);
     pthread_exit(NULL);
 }
 
-
-int isIdProduitValide(Magasin *magasin, int idProduit)
+void *fonctionVendeur(void *arg)
 {
-    for (int i = 0; i < MAX_CLIENTS; i++)
+    Magasin *magasin = (Magasin *) arg;
+
+//    pthread_mutex_lock(&mutexCompteur);
+////    const int numero = magasin->numeroVendeur++;
+//    pthread_mutex_unlock(&mutexCompteur);
+
+    while (1)
     {
-        if (idProduit == magasin->idArticles[i])
+//        pthread_mutex_lock(&mutex[numero]);
+//        pthread_cond_wait(&conditionStockEpuise[numero], &mutex[numero]);
+        for (int i = 0; i < NB_ARTICLES; i++)
         {
-            return 1;
+            pthread_mutex_lock(&mutexProduits[i]);
+            if (magasin->stockParArticle[i] < 10)
+            {
+                magasin->stockParArticle[i] += 5;
+            }
+            pthread_mutex_unlock(&mutexProduits[i]);
         }
+        printf("Je suis le vendeur, je rajoute 5 unités\n");
+        sleep(10);
+//        pthread_cond_signal(&conditionStockOk[numero]);
+//        pthread_mutex_unlock(&mutex[numero]);
     }
-    return 0;
+
+    pthread_exit(NULL);
 }
 
-int isQuantiteDisponible(Magasin *magasin, int quantitedemandee, int idProduit)
-{
-    if (getStockParArticle(magasin, idProduit) < quantitedemandee || quantitedemandee == 0)
-    {
-        return 0;
-    }
-    return 1;
-}
-
-void creerFacture(Magasin *magasin, int idProduit, int quantite, char facture[])
-{
-    int prixTotal = getPrixParArticle(magasin, idProduit) * quantite;
-    sprintf(facture, "Facture client\n"
-                     "- Article choisi : %s \n"
-                     "- Quantite achetée : %d - Prix unitaire : %d€ \n"
-                     "- Prix Total : %d€\n",
-            getLibeleParArticle(idProduit), quantite, getPrixParArticle(magasin, idProduit),
-            prixTotal);
-    facture[strlen(facture)] = 0;
-}
 
 // ------------------------- TCP ----------------------------------
 int ouvrirUneSocketAttente(void)
