@@ -105,7 +105,7 @@ int main(void)
         if (pthread_create(&clients[magasin.compteurNombreClient], NULL, accueillirClient, &magasin) != 0)
         {
             printf("erreur de creation de thread client\n");
-            return EXIT_FAILURE;
+            exit(EXIT_FAILURE);
         }
         nbclientTotal++;
     }
@@ -288,6 +288,7 @@ void *accueillirClient(void *arg)
         tampon[nbRecu] = 0;
         quantiteDemandee = atoi(tampon);
 
+
         if (isQuantiteDisponible(magasin, quantiteDemandee, idProduit))
         {
             printf("Reçu : %s\n", tampon);
@@ -300,19 +301,20 @@ void *accueillirClient(void *arg)
             magasin->stockParArticle[idProduit - 1] -= quantiteDemandee;
             pthread_mutex_unlock(&mutexProduits[idProduit - 1]);
 
-            pthread_cond_signal(&conditionRemiseStock);
 
             send(fdSocketCommunication, facture, strlen(facture), 0);
             printf("Quantite de %s restante : %d\n", getLibeleParArticle(idProduit),
                    magasin->stockParArticle[idProduit - 1]);
 
+            pthread_cond_signal(&conditionRemiseStock);
+            quantiteDemandee = 0;
         } else
         {
             sprintf(tampon, "%d", -1);
             send(fdSocketCommunication, tampon, strlen(tampon), 0);
             printf("Message erreur envoyé au client\n");
         }
-    } while (isQuantiteDisponible(magasin, quantiteDemandee, idProduit) != 1);
+    } while (quantiteDemandee != 0);
 //
 //    pthread_mutex_lock(&mutexCompteur);
 //    magasin->compteurNombreClient -= 1;
@@ -330,18 +332,16 @@ _Noreturn void *fonctionVendeur(void *arg)
     {
         for (int i = 0; i < NB_ARTICLES; i++)
         {
-            pthread_mutex_lock(&mutexProduits[i]);
-            pthread_cond_wait(&conditionRemiseStock, &mutexProduits[i]);
-
             if (magasin->stockParArticle[i] < 10)
             {
-                magasin->stockParArticle[i] += 5;
+                pthread_mutex_lock(&mutexProduits[i]);
+                pthread_cond_wait(&conditionRemiseStock, &mutexProduits[i]);
+                magasin->stockParArticle[i] += 10;
+                printf("Je suis le vendeur, je rajoute 10 unités a tous les produits\n");
+                pthread_mutex_unlock(&mutexProduits[i]);
             }
-            pthread_mutex_unlock(&mutexProduits[i]);
 
-            printf("Je suis le vendeur, je rajoute 5 unités a tous les produits\n");
         }
-        sleep(1);
 
     }
 
