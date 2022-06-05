@@ -14,7 +14,7 @@
 // ------------------------- Define
 #define PORT 6000
 #define MAX_BUFFER 3000
-#define MAX_CLIENTS 3
+#define MAX_CLIENTS 5
 #define NB_ARTICLES 3
 #define NB_SECONDES 15
 #define EXIT "exit"
@@ -33,13 +33,12 @@ typedef struct
 sem_t semaphore;
 pthread_mutex_t mutexCompteur;
 pthread_mutex_t mutexProduits[NB_ARTICLES];
-pthread_cond_t conditionStockOk[NB_ARTICLES];
-pthread_cond_t conditionStockEpuise[NB_ARTICLES];
+pthread_cond_t conditionRemiseStock;
 
 // ------------------------- Prototypes fonctions
 void initialiserMagasin(Magasin *magasin);
 void *accueillirClient(void *arg);
-void *fonctionVendeur(void *arg);
+_Noreturn void *fonctionVendeur(void *arg);
 
 int getStockParArticle(Magasin *magasin, int idArticle);
 int getPrixParArticle(Magasin *magasin, int idArticle);
@@ -59,8 +58,6 @@ void creerFacture(Magasin *magasin, int idProduit, int quantite, char facture[])
 // --------------------- ---- -------------------------------------
 int main(void)
 {
-
-
     Magasin magasin;
     initialiserMagasin(&magasin);
 
@@ -70,14 +67,7 @@ int main(void)
 
 //    pthread_t vendeur;
     pthread_t clients[MAX_CLIENTS];
-    pthread_t vendeurs[NB_ARTICLES];
-
-    for (int i = 0; i < NB_ARTICLES; ++i) {
-        if (pthread_create(&vendeurs[i], NULL, fonctionVendeur, &magasin) != 0) {
-            printf("erreur de creation de thread vendeur\n");
-            return EXIT_FAILURE;
-        }
-    }
+    pthread_t vendeurs;
 
     if (sem_init(&semaphore, 0, MAX_CLIENTS) != 0)
     {
@@ -85,19 +75,25 @@ int main(void)
         return EXIT_FAILURE;
     }
     pthread_mutex_init(&mutexCompteur, NULL);
-    for (int i = 0; i < NB_ARTICLES; ++i) {
+    for (int i = 0; i < NB_ARTICLES; ++i)
+    {
         pthread_mutex_init(&mutexProduits[i], NULL);
-        pthread_cond_init(&conditionStockOk[i], NULL);
-        pthread_cond_init(&conditionStockEpuise[i], NULL);
     }
+    pthread_cond_init(&conditionRemiseStock, NULL);
 
 
     fdSocketAttente = ouvrirUneSocketAttente();
 
     socklen_t tailleCoord = sizeof(coordonneesAppelant);
 
-    int nbClientTotal = 0;
-    while (nbClientTotal < MAX_CLIENTS)
+    if (pthread_create(&vendeurs, NULL, fonctionVendeur, &magasin) != 0)
+    {
+        printf("erreur de creation de thread vendeur\n");
+        return EXIT_FAILURE;
+    }
+
+    int nbclientTotal = 0;
+    while (nbclientTotal < MAX_CLIENTS)
     {
         if ((*fdSocketCommunication = accept(fdSocketAttente, (struct sockaddr *) &coordonneesAppelant,
                                              &tailleCoord)) == -1)
@@ -111,31 +107,27 @@ int main(void)
             printf("erreur de creation de thread client\n");
             return EXIT_FAILURE;
         }
-        nbClientTotal++;
+        nbclientTotal++;
     }
 
     // cette partie pour forcer tous les threads à se reveiller et sortir de leur boucle
     sleep(NB_SECONDES + 1);
     printf("\nbroadcast\n");
-    for (int k = 0; k < NB_ARTICLES; ++k) {
-        pthread_cond_broadcast(&conditionStockOk[k]);
-        pthread_cond_broadcast(&conditionStockEpuise[k]);
-    }
+    pthread_cond_broadcast(&conditionRemiseStock);
 
-    for (int i = 0; i < NB_ARTICLES; ++i) {
-        pthread_join(vendeurs[i], NULL);
-    }
+    pthread_join(vendeurs, NULL);
 
-    for (int j = 0; j < MAX_CLIENTS; ++j) {
+    for (int j = 0; j < MAX_CLIENTS; ++j)
+    {
         pthread_join(clients[j], NULL);
     }
 
     pthread_mutex_destroy(&mutexCompteur);
-    for (int i = 0; i < NB_ARTICLES; ++i) {
+    for (int i = 0; i < NB_ARTICLES; ++i)
+    {
         pthread_mutex_destroy(&mutexProduits[i]);
-        pthread_cond_destroy(&conditionStockOk[i]);
-        pthread_cond_destroy(&conditionStockEpuise[i]);
     }
+    pthread_cond_destroy(&conditionRemiseStock);
 }
 
 // ------------------------- Fonctions Magasin ----------------------
@@ -156,9 +148,9 @@ void initialiserMagasin(Magasin *magasin)
 
 int getStockParArticle(Magasin *magasin, int idArticle)
 {
-    pthread_mutex_lock(&mutexProduits[idArticle - 1]);
+//    pthread_mutex_lock(&mutexProduits[idArticle - 1]);
     int stockArticle = magasin->stockParArticle[idArticle - 1];
-    pthread_mutex_unlock(&mutexProduits[idArticle - 1]);
+//    pthread_mutex_unlock(&mutexProduits[idArticle - 1]);
 
     return stockArticle;
 }
@@ -308,6 +300,8 @@ void *accueillirClient(void *arg)
             magasin->stockParArticle[idProduit - 1] -= quantiteDemandee;
             pthread_mutex_unlock(&mutexProduits[idProduit - 1]);
 
+            pthread_cond_signal(&conditionRemiseStock);
+
             send(fdSocketCommunication, facture, strlen(facture), 0);
             printf("Quantite de %s restante : %d\n", getLibeleParArticle(idProduit),
                    magasin->stockParArticle[idProduit - 1]);
@@ -328,21 +322,17 @@ void *accueillirClient(void *arg)
     pthread_exit(NULL);
 }
 
-void *fonctionVendeur(void *arg)
+_Noreturn void *fonctionVendeur(void *arg)
 {
     Magasin *magasin = (Magasin *) arg;
 
-//    pthread_mutex_lock(&mutexCompteur);
-////    const int numero = magasin->numeroVendeur++;
-//    pthread_mutex_unlock(&mutexCompteur);
-
     while (1)
     {
-//        pthread_mutex_lock(&mutex[numero]);
-//        pthread_cond_wait(&conditionStockEpuise[numero], &mutex[numero]);
         for (int i = 0; i < NB_ARTICLES; i++)
         {
             pthread_mutex_lock(&mutexProduits[i]);
+            pthread_cond_wait(&conditionRemiseStock, &mutexProduits[i]);
+
             if (magasin->stockParArticle[i] < 10)
             {
                 magasin->stockParArticle[i] += 5;
@@ -350,9 +340,8 @@ void *fonctionVendeur(void *arg)
             pthread_mutex_unlock(&mutexProduits[i]);
         }
         printf("Je suis le vendeur, je rajoute 5 unités\n");
-        sleep(10);
-//        pthread_cond_signal(&conditionStockOk[numero]);
-//        pthread_mutex_unlock(&mutex[numero]);
+        sleep(1);
+
     }
 
     pthread_exit(NULL);
