@@ -8,6 +8,8 @@
 #include <sys/wait.h>
 #include <unistd.h>
 #include <pthread.h>
+//#include <bits/semaphore.h>
+#include <semaphore.h>
 
 // ------------------------- Define
 #define PORT 6000
@@ -23,7 +25,10 @@ typedef struct
     int prixParArticle[NB_ARTICLES];
     int compteurNombreClient;
     int fdSocketCommunication;
+    pthread_mutex_t mutex;
 } Magasin;
+
+sem_t semaphore;
 
 // ------------------------- Prototypes fonctions
 void initialiserMagasin(Magasin *magasin);
@@ -56,6 +61,11 @@ void creerFacture(Magasin *magasin, int idProduit, int quantite, char facture[])
 // --------------------- ---- -------------------------------------
 int main(void)
 {
+    if (sem_init(&semaphore, 0, MAX_CLIENTS) != 0)
+    {
+        printf("erreur de creation de semaphore\n");
+        return EXIT_FAILURE;
+    }
 
     Magasin magasin;
     initialiserMagasin(&magasin);
@@ -64,12 +74,17 @@ int main(void)
     int *fdSocketCommunication = &magasin.fdSocketCommunication;
     struct sockaddr_in coordonneesAppelant;
 
-    pthread_mutex_t mutex;
+    pthread_mutex_t *mutex = &magasin.mutex;
     pthread_mutex_t mutexCompteur;
+    pthread_cond_t conditionStockOk;
+    pthread_cond_t conditionStockEpuise;
     //    pthread_cond_t conditionStockOk;
 
-    pthread_mutex_init(&mutex, NULL);
+    pthread_mutex_init(mutex, NULL);
     pthread_mutex_init(&mutexCompteur, NULL);
+
+    pthread_cond_init(&conditionStockOk, NULL);
+    pthread_cond_init(&conditionStockEpuise, NULL);
 
 //    pthread_t vendeur;
     pthread_t clients[MAX_CLIENTS];
@@ -79,7 +94,7 @@ int main(void)
 
     socklen_t tailleCoord = sizeof(coordonneesAppelant);
 
-    while (magasin.compteurNombreClient < MAX_CLIENTS)
+    while (1)
     {
         if ((*fdSocketCommunication = accept(fdSocketAttente, (struct sockaddr *) &coordonneesAppelant,
                                              &tailleCoord)) == -1)
@@ -94,12 +109,6 @@ int main(void)
             return EXIT_FAILURE;
         }
     }
-
-
-    close(*fdSocketCommunication);
-    close(fdSocketAttente);
-
-    return EXIT_SUCCESS;
 }
 
 // ------------------------- Fonctions Magasin ----------------------
@@ -119,7 +128,10 @@ void initialiserMagasin(Magasin *magasin)
 
 int getStockParArticle(Magasin *magasin, int idArticle)
 {
+    pthread_mutex_lock(&magasin->mutex);
     int stockArticle = magasin->stockParArticle[idArticle - 1];
+    pthread_mutex_unlock(&magasin->mutex);
+
     return stockArticle;
 }
 
@@ -127,6 +139,7 @@ int getPrixParArticle(Magasin *magasin, int idArticle)
 {
     int prixArticle = magasin->prixParArticle[idArticle - 1];
     return prixArticle;
+
 }
 
 char *getLibeleParArticle(int idArticle)
@@ -147,12 +160,15 @@ char *getLibeleParArticle(int idArticle)
 
 void *accueillirClient(void *arg)
 {
+    sem_wait(&semaphore);
     Magasin *magasin = (Magasin *) arg;
-    int fdSocketCommunication;
+    int fdSocketCommunication = magasin->fdSocketCommunication;
     char tampon[MAX_BUFFER];
     int nbRecu;
 
+    pthread_mutex_lock(&magasin->mutex);
     magasin->compteurNombreClient += 1;
+    pthread_mutex_unlock(&magasin->mutex);
 
     printf("Client connecté\n");
     printf("Envoi du catalogue au client.\n");
@@ -216,9 +232,6 @@ void *accueillirClient(void *arg)
         tampon[nbRecu] = 0;
         quantiteDemandee = atoi(tampon);
 
-        printf("LE TAMPON : %s\n", tampon);
-        printf("Lid : %d\n", idProduit);
-
         if (isQuantiteDisponible(magasin, quantiteDemandee, idProduit))
         {
             printf("Reçu : %s\n", tampon);
@@ -240,6 +253,8 @@ void *accueillirClient(void *arg)
     } while (isQuantiteDisponible(magasin, quantiteDemandee, idProduit) != 1);
 
     magasin->compteurNombreClient -= 1;
+
+    sem_post(&semaphore);
     pthread_exit(NULL);
 }
 
